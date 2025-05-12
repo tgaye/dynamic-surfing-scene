@@ -1,0 +1,340 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Surfing Scene</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a1128;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+
+<base target="_self">
+
+
+    </head><body><div id="canvas-container">
+        <div class="instructions">Move mouse to control surfers · Click to add more</div>
+    </div>
+
+    <script>
+        const sketch = function(p) {
+            let surfers = [];
+            let wavePoints = [];
+            let sprayParticles = [];
+            let sun;
+            let palette = [
+                '#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8',
+                '#48cae4', '#90e0ef', '#ade8f4', '#caf0f8', '#f8f9fa',
+                '#ff9e00', '#ff9100', '#ff8500', '#ff7900', '#ff6d00'
+            ];
+            let bgGradient;
+
+            p.setup = function() {
+                let canvas = p.createCanvas(p.min(p.windowWidth, 1200), p.windowHeight);
+                canvas.parent('canvas-container');
+                p.colorMode(p.HSB, 360, 100, 100, 1);
+                
+                // Initialize surfers
+                for (let i = 0; i < 3; i++) {
+                    addSurfer(p.random(p.width * 0.2, p.width * 0.8), p.random(p.height * 0.4, p.height * 0.6));
+                }
+                
+                // Create wave points
+                for (let x = 0; x <= p.width + 50; x += 20) {
+                    wavePoints.push({
+                        x: x,
+                        y: p.height * 0.7,
+                        baseY: p.height * 0.7,
+                        offset: p.random(100)
+                    });
+                }
+                
+                // Create sun
+                sun = {
+                    x: p.width * 0.8,
+                    y: p.height * 0.3,
+                    size: p.width * 0.3,
+                    glow: 0
+                };
+                
+                createBackgroundGradient();
+            };
+
+            function createBackgroundGradient() {
+                bgGradient = p.createGraphics(p.width, p.height);
+                for (let y = 0; y < p.height; y++) {
+                    let inter = p.map(y, 0, p.height, 0, 1);
+                    let c = p.lerpColor(p.color(5, 80, 30), p.color(220, 80, 50), inter);
+                    bgGradient.stroke(c);
+                    bgGradient.line(0, y, p.width, y);
+                }
+            }
+
+            p.draw = function() {
+                // Draw background
+                p.image(bgGradient, 0, 0);
+                
+                // Animate sun glow
+                sun.glow = p.sin(p.frameCount * 0.01) * 20 + 30;
+                drawSun();
+                
+                // Update and draw wave
+                updateWave();
+                drawWave();
+                
+                // Update and draw spray particles
+                updateSpray();
+                drawSpray();
+                
+                // Update and draw surfers
+                updateSurfers();
+                drawSurfers();
+            };
+
+            function drawSun() {
+                p.noStroke();
+                for (let i = 0; i < 5; i++) {
+                    let size = sun.size + i * sun.glow;
+                    let alpha = p.map(i, 0, 4, 0.2, 0);
+                    p.fill(40, 80, 100, alpha);
+                    p.ellipse(sun.x, sun.y, size, size);
+                }
+                p.fill(40, 80, 100);
+                p.ellipse(sun.x, sun.y, sun.size, sun.size);
+            }
+
+            function updateWave() {
+                for (let i = 0; i < wavePoints.length; i++) {
+                    let point = wavePoints[i];
+                    let waveHeight = p.height * 0.15;
+                    let waveSpeed = 0.02;
+                    
+                    // Animate wave with noise
+                    let noiseVal = p.noise(point.offset + p.frameCount * waveSpeed);
+                    point.y = point.baseY - noiseVal * waveHeight;
+                    
+                    // Add mouse influence
+                    let mouseDist = p.dist(p.mouseX, p.mouseY, point.x, point.y);
+                    if (mouseDist < 200) {
+                        let influence = p.map(mouseDist, 0, 200, -30, 0);
+                        point.y += influence;
+                    }
+                    
+                    // Create spray at wave crest
+                    if (noiseVal > 0.7 && p.random() < 0.1) {
+                        addSpray(point.x, point.y - 10);
+                    }
+                }
+            }
+
+            function drawWave() {
+                p.noFill();
+                p.beginShape();
+                for (let i = 0; i < wavePoints.length; i++) {
+                    let point = wavePoints[i];
+                    if (i === 0) {
+                        p.vertex(-10, p.height + 10);
+                        p.vertex(point.x, p.height + 10);
+                    }
+                    p.curveVertex(point.x, point.y);
+                    if (i === wavePoints.length - 1) {
+                        p.vertex(point.x, p.height + 10);
+                        p.vertex(p.width + 10, p.height + 10);
+                    }
+                }
+                
+                // Wave gradient fill
+                let waveTop = p.color(200, 80, 50, 0.4);
+                let waveBottom = p.color(200, 80, 20, 0.8);
+                for (let y = 0; y < 50; y++) {
+                    let inter = p.map(y, 0, 50, 0, 1);
+                    let c = p.lerpColor(waveTop, waveBottom, inter);
+                    p.fill(c);
+                    p.endShape(p.CLOSE);
+                    p.beginShape();
+                    for (let i = 0; i < wavePoints.length; i++) {
+                        let point = wavePoints[i];
+                        p.curveVertex(point.x, point.y + y);
+                    }
+                }
+                p.endShape();
+            }
+
+            function addSpray(x, y) {
+                for (let i = 0; i < 5; i++) {
+                    sprayParticles.push({
+                        x: x,
+                        y: y,
+                        size: p.random(2, 5),
+                        speedX: p.random(-1, 1),
+                        speedY: p.random(-3, -1),
+                        life: p.random(30, 60),
+                        color: p.color(200, 50, 100, 0.6)
+                    });
+                }
+            }
+
+            function updateSpray() {
+                for (let i = sprayParticles.length - 1; i >= 0; i--) {
+                    let particle = sprayParticles[i];
+                    particle.x += particle.speedX;
+                    particle.y += particle.speedY;
+                    particle.speedY += 0.05;
+                    particle.life--;
+                    
+                    if (particle.life <= 0) {
+                        sprayParticles.splice(i, 1);
+                    }
+                }
+            }
+
+            function drawSpray() {
+                for (let particle of sprayParticles) {
+                    p.noStroke();
+                    particle.color.setAlpha(p.map(particle.life, 60, 0, 0.6, 0));
+                    p.fill(particle.color);
+                    p.ellipse(particle.x, particle.y, particle.size, particle.size);
+                }
+            }
+
+            function addSurfer(x, y) {
+                surfers.push({
+                    x: x,
+                    y: y,
+                    targetX: x,
+                    targetY: y,
+                    angle: 0,
+                    targetAngle: 0,
+                    size: p.random(30, 50),
+                    speed: p.random(0.5, 1.5),
+                    color: p.color(p.random(0, 60), 80, 100)
+                });
+            }
+
+            function updateSurfers() {
+                for (let surfer of surfers) {
+                    // Find closest wave point
+                    let closestPoint = null;
+                    let minDist = Infinity;
+                    
+                    for (let point of wavePoints) {
+                        let dist = p.abs(point.x - surfer.x);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestPoint = point;
+                        }
+                    }
+                    
+                    if (closestPoint) {
+                        // Move surfer along wave
+                        surfer.targetX += surfer.speed;
+                        surfer.targetY = closestPoint.y - surfer.size * 0.8;
+                        
+                        // Calculate angle based on wave slope
+                        let index = wavePoints.indexOf(closestPoint);
+                        if (index > 0 && index < wavePoints.length - 1) {
+                            let prevPoint = wavePoints[index - 1];
+                            let nextPoint = wavePoints[index + 1];
+                            let slope = (nextPoint.y - prevPoint.y) / (nextPoint.x - prevPoint.x);
+                            surfer.targetAngle = p.atan(slope);
+                        }
+                        
+                        // Mouse influence
+                        let mouseDist = p.dist(p.mouseX, p.mouseY, surfer.x, surfer.y);
+                        if (mouseDist < 150) {
+                            let influence = p.map(mouseDist, 0, 150, 1, 0);
+                            surfer.targetX = p.lerp(surfer.targetX, p.mouseX, influence * 0.1);
+                            surfer.targetY = p.lerp(surfer.targetY, p.mouseY - 50, influence * 0.1);
+                            surfer.targetAngle = p.lerp(surfer.targetAngle, p.atan2(p.mouseY - surfer.y, p.mouseX - surfer.x) - p.HALF_PI, influence);
+                        }
+                        
+                        // Smooth movement
+                        surfer.x = p.lerp(surfer.x, surfer.targetX, 0.1);
+                        surfer.y = p.lerp(surfer.y, surfer.targetY, 0.1);
+                        surfer.angle = p.lerp(surfer.angle, surfer.targetAngle, 0.1);
+                        
+                        // Wrap around screen
+                        if (surfer.x > p.width + 50) {
+                            surfer.x = -50;
+                            surfer.targetX = -50;
+                        }
+                    }
+                }
+            }
+
+            function drawSurfers() {
+                for (let surfer of surfers) {
+                    p.push();
+                    p.translate(surfer.x, surfer.y);
+                    p.rotate(surfer.angle);
+                    
+                    // Draw board
+                    p.noStroke();
+                    p.fill(255, 150);
+                    p.ellipse(0, 0, surfer.size * 1.5, surfer.size * 0.3);
+                    
+                    // Draw surfer
+                    p.fill(surfer.color);
+                    p.ellipse(0, -surfer.size * 0.2, surfer.size * 0.4, surfer.size * 0.6);
+                    
+                    p.pop();
+                }
+            }
+
+            p.mousePressed = function() {
+                addSurfer(p.mouseX, p.mouseY);
+            };
+
+            p.windowResized = function() {
+                p.resizeCanvas(p.min(p.windowWidth, 1200), p.windowHeight);
+                createBackgroundGradient();
+                
+                // Adjust wave points
+                wavePoints = [];
+                for (let x = 0; x <= p.width + 50; x += 20) {
+                    wavePoints.push({
+                        x: x,
+                        y: p.height * 0.7,
+                        baseY: p.height * 0.7,
+                        offset: p.random(100)
+                    });
+                }
+                
+                // Adjust sun position
+                sun.y = p.height * 0.3;
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
+</body></html>
